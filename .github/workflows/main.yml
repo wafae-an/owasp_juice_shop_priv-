@@ -1,0 +1,87 @@
+name: "CodeQL SAST Analysis - OWASP Juice Shop"
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyse CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript' ]
+
+    steps:
+    - name: Checkout du code
+      uses: actions/checkout@v4
+
+    - name: Initialisation de CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+        queries: security-extended,security-and-quality
+
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+
+    - name: Analyse CodeQL
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:${{matrix.language}}"
+
+    - name: Upload des résultats SARIF
+      uses: actions/upload-artifact@v4
+      with:
+        name: codeql-sarif-results
+        path: sarif-results/
+        retention-days: 30
+
+  generate-html-report:
+    name: Génération du Rapport HTML
+    needs: analyze
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout du code
+      uses: actions/checkout@v4
+
+    - name: Téléchargement des résultats SARIF
+      uses: actions/download-artifact@v4
+      with:
+        name: codeql-sarif-results
+        path: ./sarif-results
+
+    - name: Installation de Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Génération du rapport HTML
+      run: |
+        mkdir -p reports
+        node generate_report.js
+
+    - name: Upload du rapport HTML
+      uses: actions/upload-artifact@v4
+      with:
+        name: vulnerability-report
+        path: reports/vulnerabilities-report.html
+        retention-days: 90
+
+    - name: Résumé du workflow
+      run: |
+        echo "## 📊 Rapport d'Analyse SAST - CodeQL" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Analyse terminée avec succès !" >> $GITHUB_STEP_SUMMARY
+        echo "[Télécharger le rapport HTML](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
