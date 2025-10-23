@@ -76,7 +76,8 @@ jobs:
         run: |
           mkdir -p reports
           npm install -g @microsoft/sarif-multitool
-          npx @microsoft/sarif-multitool transform ./sarif-results/*.sarif --output ./reports/vulnerabilities-report.html
+          npx @microsoft/sarif-multitool convert --output-file ./reports/vulnerabilities-report.html --output-format html ./sarif-results/*.sarif
+
 
       - name: Upload du rapport HTML
         uses: actions/upload-artifact@v4
