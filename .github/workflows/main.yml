@@ -1,4 +1,4 @@
-name: "CodeQL SAST Analysis - OWASP Juice Shop"
+name: CodeQL SAST Analysis - OWASP Juice Shop
 
 on:
   push:
@@ -24,29 +24,22 @@ jobs:
         language: [ 'javascript' ]
 
     steps:
-    - name: Checkout du code
-      uses: actions/checkout@v4
+      - name: Checkout du code
+        uses: actions/checkout@v4
 
-    - name: Initialisation de CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: ${{ matrix.language }}
-        queries: security-extended,security-and-quality
+      - name: Initialisation de CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
 
-    - name: Analyse CodeQL
-      uses: github/codeql-action/analyze@v3
-      with:
-        category: "/language:${{matrix.language}}"
-
-    - name: Upload des résultats SARIF
-      uses: actions/upload-artifact@v4
-      with:
-        name: codeql-sarif-results
-        path: sarif-results/
-        retention-days: 30
+      - name: Analyse CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
 
   generate-html-report:
     name: Génération du Rapport HTML
@@ -54,34 +47,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout du code
-      uses: actions/checkout@v4
+      - name: Checkout du code
+        uses: actions/checkout@v4
 
-    - name: Téléchargement des résultats SARIF
-      uses: actions/download-artifact@v4
-      with:
-        name: codeql-sarif-results
-        path: ./sarif-results
+      - name: Téléchargement des résultats SARIF
+        uses: actions/download-artifact@v4
+        with:
+          name: codeql-sarif-results
+          path: ./sarif-results
 
-    - name: Installation de Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
+      - name: Installation de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-    - name: Génération du rapport HTML
-      run: |
-        mkdir -p reports
-        node generate_report.js
+      - name: Génération du rapport HTML
+        run: |
+          mkdir -p reports
+          npm install -g @microsoft/sarif-multitool
+          npx @microsoft/sarif-multitool transform ./sarif-results/javascript.sarif --output ./reports/vulnerabilities-report.html
 
-    - name: Upload du rapport HTML
-      uses: actions/upload-artifact@v4
-      with:
-        name: vulnerability-report
-        path: reports/vulnerabilities-report.html
-        retention-days: 90
+      - name: Upload du rapport HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-report
+          path: reports/vulnerabilities-report.html
+          retention-days: 90
 
-    - name: Résumé du workflow
-      run: |
-        echo "## 📊 Rapport d'Analyse SAST - CodeQL" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Analyse terminée avec succès !" >> $GITHUB_STEP_SUMMARY
-        echo "[Télécharger le rapport HTML](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+      - name: Résumé du workflow
+        run: |
+          echo "## 📊 Rapport d'Analyse SAST - CodeQL" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Analyse terminée avec succès !" >> $GITHUB_STEP_SUMMARY
+          echo "[📄 Télécharger le rapport HTML](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)" >> $GITHUB_STEP_SUMMARY
