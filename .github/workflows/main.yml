@@ -40,7 +40,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
-          upload: false  # ⛔ évite l'envoi automatique vers Code Scanning
+          upload: false
           output: ./codeql-results
 
       - name: Sauvegarde du rapport SARIF
@@ -73,12 +73,11 @@ jobs:
         run: |
           mkdir -p reports
           
-          # Vérifier que les fichiers SARIF existent
           echo "📁 Contenu du dossier sarif-results :"
           ls -la ./sarif-results/
           
-          # Créer un script de conversion natif sans dépendances externes
-          cat > convert-sarif.js << 'EOF'
+          # Créer le script de conversion dans un fichier séparé
+          cat > convert-sarif.js << 'ENDOFSCRIPT'
           const fs = require('fs');
           const path = require('path');
 
@@ -96,213 +95,6 @@ jobs:
             });
 
             const totalIssues = results.length;
-
-            const htmlContent = `
-          <!DOCTYPE html>
-          <html lang="fr">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Rapport de Sécurité - ${tool}</title>
-              <style>
-                  * { box-sizing: border-box; margin: 0; padding: 0; }
-                  body { 
-                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-                      line-height: 1.6; 
-                      color: #24292e; 
-                      background: #f6f8fa;
-                      padding: 20px;
-                  }
-                  .container { 
-                      max-width: 1200px; 
-                      margin: 0 auto; 
-                      background: white;
-                      border-radius: 6px;
-                      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                      overflow: hidden;
-                  }
-                  .header { 
-                      background: linear-gradient(135deg, #2b5797, #1e3c72);
-                      color: white; 
-                      padding: 30px; 
-                      text-align: center;
-                  }
-                  .header h1 { 
-                      font-size: 2.5em; 
-                      margin-bottom: 10px;
-                      font-weight: 300;
-                  }
-                  .summary { 
-                      display: grid; 
-                      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-                      gap: 15px; 
-                      padding: 25px; 
-                      background: #f8f9fa;
-                      border-bottom: 1px solid #e1e4e8;
-                  }
-                  .stat-card { 
-                      background: white; 
-                      padding: 20px; 
-                      border-radius: 6px; 
-                      text-align: center;
-                      border-left: 4px solid;
-                      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-                  }
-                  .stat-card.critical { border-left-color: #d73a49; }
-                  .stat-card.high { border-left-color: #f66a0a; }
-                  .stat-card.medium { border-left-color: #ffd33d; }
-                  .stat-card.low { border-left-color: #28a745; }
-                  .stat-number { 
-                      font-size: 2em; 
-                      font-weight: bold; 
-                      display: block; 
-                  }
-                  .issues-section { padding: 25px; }
-                  .issue { 
-                      border: 1px solid #e1e4e8; 
-                      margin: 15px 0; 
-                      padding: 20px; 
-                      border-radius: 6px;
-                      border-left: 4px solid;
-                      transition: transform 0.2s, box-shadow 0.2s;
-                  }
-                  .issue:hover {
-                      transform: translateY(-2px);
-                      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                  }
-                  .issue.critical { border-left-color: #d73a49; background: #fff5f5; }
-                  .issue.high { border-left-color: #f66a0a; background: #fff8f0; }
-                  .issue.medium { border-left-color: #ffd33d; background: #fffdef; }
-                  .issue.low { border-left-color: #28a745; background: #f0fff4; }
-                  .issue-header { 
-                      display: flex; 
-                      justify-content: between; 
-                      align-items: center;
-                      margin-bottom: 10px;
-                  }
-                  .rule-id { 
-                      font-weight: bold; 
-                      color: #0366d6; 
-                      font-size: 1.1em;
-                  }
-                  .severity { 
-                      padding: 4px 12px; 
-                      border-radius: 20px; 
-                      font-size: 0.8em; 
-                      font-weight: bold;
-                      text-transform: uppercase;
-                  }
-                  .severity.critical { background: #d73a49; color: white; }
-                  .severity.high { background: #f66a0a; color: white; }
-                  .severity.medium { background: #ffd33d; color: #333; }
-                  .severity.low { background: #28a745; color: white; }
-                  .message { 
-                      margin: 15px 0; 
-                      font-size: 1em;
-                      line-height: 1.5;
-                  }
-                  .location { 
-                      color: #6a737d; 
-                      font-size: 0.9em;
-                      background: #f6f8fa;
-                      padding: 8px 12px;
-                      border-radius: 4px;
-                      margin-top: 10px;
-                  }
-                  .no-issues { 
-                      text-align: center; 
-                      padding: 40px; 
-                      color: #6a737d;
-                  }
-                  .footer { 
-                      text-align: center; 
-                      padding: 20px; 
-                      color: #6a737d; 
-                      border-top: 1px solid #e1e4e8;
-                      background: #f8f9fa;
-                  }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <div class="header">
-                      <h1>🔒 Rapport d'Analyse de Sécurité</h1>
-                      <p>${tool} v${version} - Généré le ${new Date().toLocaleString('fr-FR')}</p>
-                  </div>
-
-                  <div class="summary">
-                      <div class="stat-card ${totalIssues === 0 ? 'low' : 'critical'}">
-                          <span class="stat-number">${totalIssues}</span>
-                          Total des problèmes
-                      </div>
-                      <div class="stat-card critical">
-                          <span class="stat-number">${severityCount.error}</span>
-                          Critiques
-                      </div>
-                      <div class="stat-card high">
-                          <span class="stat-number">${severityCount.warning}</span>
-                          Élevés
-                      </div>
-                      <div class="stat-card medium">
-                          <span class="stat-number">${severityCount.note}</span>
-                          Moyens
-                      </div>
-                      <div class="stat-card low">
-                          <span class="stat-number">${severityCount.none}</span>
-                          Faibles
-                      </div>
-                  </div>
-
-                  <div class="issues-section">
-                      <h2 style="margin-bottom: 20px; color: #2b5797;">📋 Détail des Vulnérabilités</h2>
-                      
-                      ${totalIssues === 0 ? 
-                          '<div class="no-issues"><h3>✅ Aucune vulnérabilité détectée</h3><p>Votre code semble sécurisé !</p></div>' : 
-                          results.map((result, index) => {
-                              const severity = result.level?.toLowerCase() || 'warning';
-                              const severityText = getSeverityText(severity);
-                              const severityClass = getSeverityClass(severity);
-                              
-                              return \`
-                              <div class="issue $\{severityClass}">
-                                  <div class="issue-header">
-                                      <span class="rule-id">#$\{index + 1} - $\{result.ruleId || 'N/A'}</span>
-                                      <span class="severity $\{severityClass}">$\{severityText}</span>
-                                  </div>
-                                  <div class="message">
-                                      <strong>Description:</strong> $\{result.message?.text || 'Aucune description disponible'}
-                                  </div>
-                                  $\{result.locations && result.locations.length > 0 ? \`
-                                      <div class="location">
-                                          <strong>📍 Emplacement:</strong> $\{result.locations.map(loc => 
-                                              \`$\{loc.physicalLocation?.artifactLocation?.uri || 'Fichier inconnu'}:$\{loc.physicalLocation?.region?.startLine || '?'}\`).join(', ')}
-                                      </div>
-                                  \` : ''}
-                              </div>
-                              \`;
-                          }).join('')
-                      }
-                  </div>
-
-                  <div class="footer">
-                      <p>Rapport généré automatiquement par GitHub Actions</p>
-                  </div>
-              </div>
-
-              <script>
-                  // Ajout d'interactivité simple
-                  document.addEventListener('DOMContentLoaded', function() {
-                      const issues = document.querySelectorAll('.issue');
-                      issues.forEach(issue => {
-                          issue.addEventListener('click', function() {
-                              this.classList.toggle('expanded');
-                          });
-                      });
-                  });
-              </script>
-          </body>
-          </html>
-            `;
 
             function getSeverityClass(severity) {
               switch(severity) {
@@ -323,6 +115,218 @@ jobs:
                 default: return 'Inconnu';
               }
             }
+
+            let issuesHtml = '';
+            if (totalIssues === 0) {
+              issuesHtml = '<div class="no-issues"><h3>✅ Aucune vulnérabilité détectée</h3><p>Votre code semble sécurisé !</p></div>';
+            } else {
+              results.forEach((result, index) => {
+                const severity = result.level?.toLowerCase() || 'warning';
+                const severityText = getSeverityText(severity);
+                const severityClass = getSeverityClass(severity);
+                
+                let locationHtml = '';
+                if (result.locations && result.locations.length > 0) {
+                  const locations = result.locations.map(loc => 
+                    \`\${loc.physicalLocation?.artifactLocation?.uri || 'Fichier inconnu'}:\${loc.physicalLocation?.region?.startLine || '?'}\`
+                  ).join(', ');
+                  locationHtml = \`<div class="location"><strong>📍 Emplacement:</strong> \${locations}</div>\`;
+                }
+                
+                issuesHtml += \`
+                <div class="issue \${severityClass}">
+                  <div class="issue-header">
+                    <span class="rule-id">#\${index + 1} - \${result.ruleId || 'N/A'}</span>
+                    <span class="severity \${severityClass}">\${severityText}</span>
+                  </div>
+                  <div class="message">
+                    <strong>Description:</strong> \${result.message?.text || 'Aucune description disponible'}
+                  </div>
+                  \${locationHtml}
+                </div>
+                \`;
+              });
+            }
+
+            const htmlContent = \`
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport de Sécurité - \${tool}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            line-height: 1.6; 
+            color: #24292e; 
+            background: #f6f8fa;
+            padding: 20px;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header { 
+            background: linear-gradient(135deg, #2b5797, #1e3c72);
+            color: white; 
+            padding: 30px; 
+            text-align: center;
+        }
+        .header h1 { 
+            font-size: 2.5em; 
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+        .summary { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 15px; 
+            padding: 25px; 
+            background: #f8f9fa;
+            border-bottom: 1px solid #e1e4e8;
+        }
+        .stat-card { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 6px; 
+            text-align: center;
+            border-left: 4px solid;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .stat-card.critical { border-left-color: #d73a49; }
+        .stat-card.high { border-left-color: #f66a0a; }
+        .stat-card.medium { border-left-color: #ffd33d; }
+        .stat-card.low { border-left-color: #28a745; }
+        .stat-number { 
+            font-size: 2em; 
+            font-weight: bold; 
+            display: block; 
+        }
+        .issues-section { padding: 25px; }
+        .issue { 
+            border: 1px solid #e1e4e8; 
+            margin: 15px 0; 
+            padding: 20px; 
+            border-radius: 6px;
+            border-left: 4px solid;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .issue:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .issue.critical { border-left-color: #d73a49; background: #fff5f5; }
+        .issue.high { border-left-color: #f66a0a; background: #fff8f0; }
+        .issue.medium { border-left-color: #ffd33d; background: #fffdef; }
+        .issue.low { border-left-color: #28a745; background: #f0fff4; }
+        .issue-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .rule-id { 
+            font-weight: bold; 
+            color: #0366d6; 
+            font-size: 1.1em;
+        }
+        .severity { 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 0.8em; 
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .severity.critical { background: #d73a49; color: white; }
+        .severity.high { background: #f66a0a; color: white; }
+        .severity.medium { background: #ffd33d; color: #333; }
+        .severity.low { background: #28a745; color: white; }
+        .message { 
+            margin: 15px 0; 
+            font-size: 1em;
+            line-height: 1.5;
+        }
+        .location { 
+            color: #6a737d; 
+            font-size: 0.9em;
+            background: #f6f8fa;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .no-issues { 
+            text-align: center; 
+            padding: 40px; 
+            color: #6a737d;
+        }
+        .footer { 
+            text-align: center; 
+            padding: 20px; 
+            color: #6a737d; 
+            border-top: 1px solid #e1e4e8;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 Rapport d'Analyse de Sécurité</h1>
+            <p>\${tool} v\${version} - Généré le \${new Date().toLocaleString('fr-FR')}</p>
+        </div>
+
+        <div class="summary">
+            <div class="stat-card \${totalIssues === 0 ? 'low' : 'critical'}">
+                <span class="stat-number">\${totalIssues}</span>
+                Total des problèmes
+            </div>
+            <div class="stat-card critical">
+                <span class="stat-number">\${severityCount.error}</span>
+                Critiques
+            </div>
+            <div class="stat-card high">
+                <span class="stat-number">\${severityCount.warning}</span>
+                Élevés
+            </div>
+            <div class="stat-card medium">
+                <span class="stat-number">\${severityCount.note}</span>
+                Moyens
+            </div>
+            <div class="stat-card low">
+                <span class="stat-number">\${severityCount.none}</span>
+                Faibles
+            </div>
+        </div>
+
+        <div class="issues-section">
+            <h2 style="margin-bottom: 20px; color: #2b5797;">📋 Détail des Vulnérabilités</h2>
+            \${issuesHtml}
+        </div>
+
+        <div class="footer">
+            <p>Rapport généré automatiquement par GitHub Actions</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const issues = document.querySelectorAll('.issue');
+            issues.forEach(issue => {
+                issue.addEventListener('click', function() {
+                    this.classList.toggle('expanded');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+            \`;
 
             fs.writeFileSync(outputPath, htmlContent);
           }
@@ -350,19 +354,18 @@ jobs:
               const outputFile = path.join(reportsDir, file.replace('.sarif', '.html'));
               
               generateHtmlReport(sarifData, outputFile);
-              console.log(\`✅ Converti: $\{file} -> $\{path.basename(outputFile)}\`);
+              console.log(\`✅ Converti: \${file} -> \${path.basename(outputFile)}\`);
             } catch (error) {
-              console.error(\`❌ Erreur avec $\{file}: $\{error.message}\`);
+              console.error(\`❌ Erreur avec \${file}: \${error.message}\`);
             }
           });
 
-          console.log(\`🎯 Conversion terminée: $\{files.length} fichier(s) traité(s)\`);
-          EOF
+          console.log(\`🎯 Conversion terminée: \${files.length} fichier(s) traité(s)\`);
+          ENDOFSCRIPT
 
           # Exécuter le script de conversion
           node convert-sarif.js
           
-          # Vérifier que les fichiers ont été créés
           echo "📁 Contenu du dossier reports :"
           ls -lh ./reports/
           echo "✅ Rapport(s) HTML généré(s) avec succès"
@@ -381,12 +384,10 @@ jobs:
           echo "✅ Analyse terminée avec succès !" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          # Compter les fichiers générés
           report_count=$(ls -1 ./reports/*.html 2>/dev/null | wc -l || echo "0")
           echo "📄 **$report_count rapport(s) HTML généré(s)**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          # Lister les rapports
           echo "### 📋 Fichiers disponibles :" >> $GITHUB_STEP_SUMMARY
           for file in ./reports/*.html; do
             if [ -f "$file" ]; then
