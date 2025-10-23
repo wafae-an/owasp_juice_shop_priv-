@@ -18,12 +18,10 @@ jobs:
       contents: read
       security-events: write
       packages: read
-
     strategy:
       fail-fast: false
       matrix:
         language: [ 'javascript' ]
-
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
@@ -42,7 +40,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
-          upload: never  # ⛔ évite l'envoi automatique vers Code Scanning
+          upload: false  # ⛔ évite l'envoi automatique vers Code Scanning
           output: ./codeql-results
 
       - name: Sauvegarde du rapport SARIF
@@ -56,7 +54,6 @@ jobs:
     name: Génération du Rapport HTML
     needs: analyze
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
@@ -75,18 +72,47 @@ jobs:
       - name: Génération du rapport HTML
         run: |
           mkdir -p reports
-          npm install -g sarif-viewer-bundle
-          npx sarif-viewer-bundle ./sarif-results/*.sarif --output ./reports/vulnerabilities-report.html
+          npm install -g sarif-html
+          
+          # Convertir chaque fichier SARIF en HTML
+          for file in ./sarif-results/*.sarif; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file" .sarif)
+              echo "🔄 Conversion de $filename..."
+              npx sarif-html "$file" --output "./reports/${filename}.html"
+            fi
+          done
+          
+          # Vérifier que les fichiers ont été créés
+          ls -lh ./reports/
+          echo "✅ Rapport(s) HTML généré(s) avec succès"
 
       - name: Upload du rapport HTML
         uses: actions/upload-artifact@v4
         with:
           name: vulnerability-report
-          path: reports/vulnerabilities-report.html
+          path: reports/*.html
           retention-days: 90
 
       - name: Résumé du workflow
         run: |
           echo "## 📊 Rapport d'Analyse SAST - CodeQL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Analyse terminée avec succès !" >> $GITHUB_STEP_SUMMARY
-          echo "[📄 Télécharger le rapport HTML](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Compter les fichiers générés
+          report_count=$(ls -1 ./reports/*.html 2>/dev/null | wc -l)
+          echo "📄 **$report_count rapport(s) HTML généré(s)**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Lister les rapports
+          echo "### 📋 Fichiers disponibles :" >> $GITHUB_STEP_SUMMARY
+          for file in ./reports/*.html; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "- 🔍 $filename" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [Télécharger les rapports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)" >> $GITHUB_STEP_SUMMARY
