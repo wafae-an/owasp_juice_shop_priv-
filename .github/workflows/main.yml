@@ -17,6 +17,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
+      packages: read
 
     strategy:
       fail-fast: false
@@ -33,13 +34,23 @@ jobs:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Installation du projet
+        run: npm install
 
       - name: Analyse CodeQL
+        id: analyze
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
+          upload: never  # ⛔ évite l'envoi automatique vers Code Scanning
+          output: ./codeql-results
+
+      - name: Sauvegarde du rapport SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-results
+          path: ./codeql-results/*.sarif
+          retention-days: 30
 
   generate-html-report:
     name: Génération du Rapport HTML
@@ -65,7 +76,7 @@ jobs:
         run: |
           mkdir -p reports
           npm install -g @microsoft/sarif-multitool
-          npx @microsoft/sarif-multitool transform ./sarif-results/javascript.sarif --output ./reports/vulnerabilities-report.html
+          npx @microsoft/sarif-multitool transform ./sarif-results/*.sarif --output ./reports/vulnerabilities-report.html
 
       - name: Upload du rapport HTML
         uses: actions/upload-artifact@v4
