@@ -25,22 +25,22 @@ jobs:
       - name: Installation des dépendances
         run: npm ci
 
-      - name: Build de l'application (si nécessaire)
-        run: npm run build --if-present
-        continue-on-error: true
+      - name: Vérification de Cypress
+        run: npx cypress verify
 
       - name: Exécution des tests Cypress
         uses: cypress-io/github-action@v6
         with:
+          install: false
           start: npm start
           wait-on: 'http://localhost:3000'
           wait-on-timeout: 120
           browser: chrome
           headed: false
-          record: false
-          config-file: cypress.config.js
+          command: npx cypress run --browser chrome --headless
         env:
           NODE_ENV: test
+          CYPRESS_RECORD_KEY: ''
 
       - name: Sauvegarde des screenshots (en cas d'échec)
         uses: actions/upload-artifact@v4
@@ -58,23 +58,16 @@ jobs:
           path: cypress/videos
           retention-days: 30
 
-      - name: Génération du rapport HTML
-        if: always()
-        run: |
-          mkdir -p reports
-          if [ -d "cypress/results" ]; then
-            cp -r cypress/results/* reports/ || true
-          fi
-
       - name: Sauvegarde du rapport de tests
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-test-report
+          name: cypress-test-results
           path: |
-            reports/**/*
             cypress/results/**/*
+            cypress/reports/**/*
           retention-days: 30
+          if-no-files-found: ignore
 
       - name: Résumé des tests
         if: always()
@@ -82,8 +75,9 @@ jobs:
           echo "## 🧪 Résultats des Tests E2E Cypress" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📊 Informations d'exécution :" >> $GITHUB_STEP_SUMMARY
-          echo "- 🖥️ Navigateur : Chrome" >> $GITHUB_STEP_SUMMARY
-          echo "- 🌐 URL testée : http://localhost:3000" >> $GITHUB_STEP_SUMMARY
+          echo "- 🖥️ Système : Ubuntu Latest" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌐 Navigateur : Chrome Headless" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔗 URL testée : http://localhost:3000" >> $GITHUB_STEP_SUMMARY
           echo "- ⏱️ Timeout : 120 secondes" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
