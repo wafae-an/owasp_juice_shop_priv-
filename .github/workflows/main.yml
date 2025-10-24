@@ -75,8 +75,9 @@ jobs:
           mkdir -p reports
           for file in ./sarif-results/*.sarif; do
             filename=$(basename "$file" .sarif)
-            sarif-tools html "$file" -o "reports/${filename}.html"
+            python -m sarif_tools html "$file" -o "reports/${filename}.html"
           done
+
 
       - name: Upload du rapport HTML
         uses: actions/upload-artifact@v4
