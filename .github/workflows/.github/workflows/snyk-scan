@@ -1,0 +1,115 @@
+name: SCA - Software Composition Analysis (Snyk)
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 3 * * *'  # Exécution quotidienne à 3h du matin
+  workflow_dispatch:
+
+jobs:
+  snyk-scan:
+    name: Analyse des Dépendances avec Snyk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Installation des dépendances
+        run: npm install
+
+      - name: Installation de Snyk CLI
+        run: |
+          npm install -g snyk
+          snyk --version
+
+      - name: Authentification Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: false
+
+      - name: Test des vulnérabilités avec Snyk
+        id: snyk-test
+        run: |
+          snyk test --json --severity-threshold=low > snyk-results.json || true
+        continue-on-error: true
+
+      - name: Génération du rapport JSON détaillé
+        run: |
+          mkdir -p reports
+          snyk test --json --all-projects > reports/snyk-vulnerability-report.json || true
+          
+          # Génération d'un rapport HTML (si disponible)
+          snyk test --json > reports/snyk-test-results.json || true
+
+      - name: Monitoring Snyk (optionnel)
+        run: |
+          snyk monitor --all-projects || true
+        continue-on-error: true
+
+      - name: Sauvegarde du rapport JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-vulnerability-report
+          path: reports/*.json
+          retention-days: 90
+
+      - name: Sauvegarde des résultats bruts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-raw-results
+          path: snyk-results.json
+          retention-days: 30
+        if: always()
+
+      - name: Analyse des résultats
+        run: |
+          if [ -f "snyk-results.json" ]; then
+            echo "## 🔍 Résumé de l'Analyse Snyk SCA" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Extraction des statistiques
+            critical=$(jq '[.vulnerabilities[] | select(.severity=="critical")] | length' snyk-results.json 2>/dev/null || echo "0")
+            high=$(jq '[.vulnerabilities[] | select(.severity=="high")] | length' snyk-results.json 2>/dev/null || echo "0")
+            medium=$(jq '[.vulnerabilities[] | select(.severity=="medium")] | length' snyk-results.json 2>/dev/null || echo "0")
+            low=$(jq '[.vulnerabilities[] | select(.severity=="low")] | length' snyk-results.json 2>/dev/null || echo "0")
+            
+            echo "### 📊 Vulnérabilités Détectées :" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Sévérité | Nombre |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔴 Critical | $critical |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟠 High | $high |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟡 Medium | $medium |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟢 Low | $low |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            total=$((critical + high + medium + low))
+            echo "**Total : $total vulnérabilité(s)**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🔗 [Télécharger le rapport complet](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Aucun fichier de résultats trouvé" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Vérification des vulnérabilités critiques
+        run: |
+          if [ -f "snyk-results.json" ]; then
+            critical=$(jq '[.vulnerabilities[] | select(.severity=="critical")] | length' snyk-results.json 2>/dev/null || echo "0")
+            if [ "$critical" -gt "0" ]; then
+              echo "❌ ATTENTION : $critical vulnérabilité(s) critique(s) détectée(s) !"
+              exit 1
+            fi
+          fi
+        continue-on-error: true
