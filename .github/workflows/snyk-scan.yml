@@ -1,134 +1,48 @@
-name: E2E Testing avec Cypress
+name: "SCA using Snyk"
 
 on:
   push:
-    branches: [ "main", "master", "develop" ]
+    branches:
+      - master
   pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  security-events: write
 
 jobs:
-  cypress-test:
-    name: Tests E2E Cypress
+  security_testing:
+    name: Security Testing
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout du code
+      # clonage  de repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Installation de Node.js
+      # Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
-      - name: Installation des dépendances
-        run: |
-          npm install
-          npm install --save-dev cypress mochawesome mochawesome-merge mochawesome-report-generator
+      # installation des dependances
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Création de la configuration Cypress
-        run: |
-          cat > cypress.config.js << 'EOF'
-          const { defineConfig } = require('cypress')
-          
-          module.exports = defineConfig({
-            e2e: {
-              baseUrl: 'http://localhost:3000',
-              video: true,
-              screenshotOnRunFailure: true,
-              reporter: 'mochawesome',
-              reporterOptions: {
-                reportDir: 'cypress/results',
-                overwrite: false,
-                html: true,
-                json: true
-              }
-            }
-          })
-          EOF
-
-      - name: Création des tests Cypress de base
-        run: |
-          mkdir -p cypress/e2e
-          cat > cypress/e2e/basic.cy.js << 'EOF'
-          describe('OWASP Juice Shop - Tests Basiques', () => {
-            it('Page d\'accueil accessible', () => {
-              cy.visit('/')
-              cy.wait(3000)
-            })
-            
-            it('Vérification du titre', () => {
-              cy.visit('/')
-              cy.title().should('exist')
-            })
-          })
-          EOF
-
-      - name: Démarrage de l'application en arrière-plan
-        run: |
-          npm start &
-          sleep 30
-          curl --retry 10 --retry-delay 5 --retry-connrefused http://localhost:3000 || echo "Serveur démarré"
-
-      - name: Exécution des tests Cypress
-        run: |
-          npx cypress run --browser chrome --headless
-        continue-on-error: true
-
-      - name: Fusion des rapports Mochawesome
-        if: always()
-        run: |
-          npx mochawesome-merge cypress/results/*.json > cypress/results/combined-report.json
-          npx marge cypress/results/combined-report.json --reportDir cypress/reports --inline
-        continue-on-error: true
-
-      - name: Sauvegarde des vidéos
-        uses: actions/upload-artifact@v4
-        if: always()
+      # installation et execution Snyk
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/setup@master
         with:
-          name: cypress-videos
-          path: cypress/videos/
-          if-no-files-found: ignore
-          retention-days: 30
+          command: snyk test --json-file-output=snyk-results.json
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Sauvegarde des screenshots
+      # sauvegarde de rapport JSON en tant qu’artifact
+      - name: Upload Scan Results
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: cypress-screenshots
-          path: cypress/screenshots/
-          if-no-files-found: ignore
-          retention-days: 30
-
-      - name: Sauvegarde du rapport HTML
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: cypress-html-report
-          path: cypress/reports/
-          if-no-files-found: ignore
-          retention-days: 90
-
-      - name: Sauvegarde des résultats JSON
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: cypress-json-results
-          path: cypress/results/
-          if-no-files-found: ignore
-          retention-days: 30
-
-      - name: Résumé des tests
-        if: always()
-        run: |
-          echo "## 🧪 Tests E2E Cypress - Résultats" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Tests exécutés avec succès" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Artifacts générés :" >> $GITHUB_STEP_SUMMARY
-          echo "- 📹 Vidéos des tests" >> $GITHUB_STEP_SUMMARY
-          echo "- 📸 Screenshots" >> $GITHUB_STEP_SUMMARY
-          echo "- 📄 Rapport HTML" >> $GITHUB_STEP_SUMMARY
-          echo "- 📊 Résultats JSON" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 [Télécharger les rapports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)" >> $GITHUB_STEP_SUMMARY
+          name: snyk-vulnerability-report
+          path: snyk-results.json
