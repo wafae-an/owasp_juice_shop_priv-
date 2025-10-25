@@ -32,74 +32,29 @@ jobs:
       - name: Install Snyk CLI
         run: npm install -g snyk
       
-      # vérification de l'authentification Snyk
-      - name: Verify Snyk Authentication
-        run: |
-          echo "🔐 Vérification de l'authentification Snyk..."
-          snyk auth ${{ secrets.SNYK_TOKEN }}
-          snyk config get api
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      
-      # execution de Snyk avec logs détaillés
+      # execution de Snyk avec continue-on-error
       - name: Run Snyk to check for vulnerabilities
         continue-on-error: true
-        run: |
-          echo "🔍 Démarrage du scan Snyk..."
-          snyk test --json --json-file-output=snyk-results.json 2>&1 | tee snyk-output.log
-          EXIT_CODE=$?
-          echo "📊 Code de sortie Snyk: $EXIT_CODE"
-          
-          if [ $EXIT_CODE -eq 0 ]; then
-            echo "✅ Aucune vulnérabilité trouvée"
-          elif [ $EXIT_CODE -eq 1 ]; then
-            echo "⚠️ Vulnérabilités détectées (comportement normal pour Juice Shop)"
-          else
-            echo "❌ Erreur lors de l'exécution de Snyk"
-          fi
+        run: snyk test --json --json-file-output=snyk-results.json || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      
-      # affichage des logs pour debugging
-      - name: Display Snyk Output
-        if: always()
-        run: |
-          echo "📋 Contenu du log Snyk:"
-          if [ -f snyk-output.log ]; then
-            cat snyk-output.log
-          else
-            echo "❌ Fichier de log introuvable"
-          fi
       
       # vérification de l'existence du fichier
       - name: Check if results file exists
-        if: always()
         run: |
           if [ -f snyk-results.json ]; then
             echo "✅ Fichier snyk-results.json trouvé"
-            FILE_SIZE=$(wc -c < snyk-results.json)
-            echo "📏 Taille du fichier: $FILE_SIZE octets"
-            
-            if [ $FILE_SIZE -gt 100 ]; then
-              echo "📄 Aperçu du contenu (100 premiers caractères):"
-              head -c 100 snyk-results.json
-              echo ""
-            else
-              echo "📄 Contenu complet:"
-              cat snyk-results.json
-            fi
+            cat snyk-results.json
           else
             echo "❌ Fichier snyk-results.json introuvable"
-            echo "Création d'un fichier de rapport d'erreur"
-            echo '{"vulnerabilities": [], "error": "Snyk test failed - check logs above"}' > snyk-results.json
+            echo "Création d'un fichier vide pour l'artifact"
+            echo '{"vulnerabilities": [], "error": "No results generated"}' > snyk-results.json
           fi
       
-      # sauvegarde des logs et résultats
-      - name: Upload Scan Results and Logs
+      # sauvegarde de rapport JSON en tant qu'artifact
+      - name: Upload Scan Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: snyk-vulnerability-report
-          path: |
-            snyk-results.json
-            snyk-output.log
+          path: snyk-results.json
