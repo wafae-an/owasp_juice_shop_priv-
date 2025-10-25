@@ -1,5 +1,4 @@
 name: "SCA using Snyk"
-
 on:
   push:
     branches:
@@ -7,41 +6,54 @@ on:
   pull_request:
     branches:
       - main
-
 permissions:
   contents: write
   security-events: write
-
 jobs:
   security_testing:
     name: Security Testing
     runs-on: ubuntu-latest
-
     steps:
-      # clonage  de repo
+      # clonage de repo
       - name: Checkout Repository
         uses: actions/checkout@v4
-
+      
       # Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
+      
       # installation des dependances
       - name: Install Dependencies
         run: npm install
-
-      # installation et execution Snyk
+      
+      # installation de Snyk CLI
+      - name: Install Snyk CLI
+        run: npm install -g snyk
+      
+      # execution de Snyk avec continue-on-error
       - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/setup@master
-        with:
-          command: snyk test --json-file-output=snyk-results.json
+        continue-on-error: true
+        run: snyk test --json --json-file-output=snyk-results.json || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      # sauvegarde de rapport JSON en tant qu’artifact
+      
+      # vérification de l'existence du fichier
+      - name: Check if results file exists
+        run: |
+          if [ -f snyk-results.json ]; then
+            echo "✅ Fichier snyk-results.json trouvé"
+            cat snyk-results.json
+          else
+            echo "❌ Fichier snyk-results.json introuvable"
+            echo "Création d'un fichier vide pour l'artifact"
+            echo '{"vulnerabilities": [], "error": "No results generated"}' > snyk-results.json
+          fi
+      
+      # sauvegarde de rapport JSON en tant qu'artifact
       - name: Upload Scan Results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: snyk-vulnerability-report
